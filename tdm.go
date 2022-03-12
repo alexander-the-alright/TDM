@@ -92,6 +92,7 @@
 //             began updating help()
 //*03-11-2022: updated help()
 //             commented /move/ and /mark/ of parse()
+//             super fixed subtask propogation bug in fileIn()
 //
 // =============================================================================
 
@@ -173,7 +174,22 @@ func fileOut() {
                 // iterate over a task's subtasks
                 for sind, scontents := range tcontents.subt {
                 // add subtask name
+
+                    // XXX
+                    if flag {   // if debug set, print incoming
+                                // subtask and data before...
+                        print( "subt.name: ", scontents.name )
+                        print( "pre data: ", data )
+                    }
+
+
                     data = data + scontents.name
+
+                    // XXX
+                    if flag {   // and after
+                        print( "post data: ", data )
+                    }
+
                     data = data + ">"       // XXX subtask fill delim
 
                     // convert fill back to ascii
@@ -261,7 +277,6 @@ func fileIn() {
         board = split( string( file ), "$" )
     }
 
-    
     // iterate over all boards
     for a := 0; a < len( board ); a++ {
         // split board by name and tasks
@@ -325,8 +340,9 @@ func fileIn() {
                 print( "[]task -> ", tasks )
             }
 
-            // this line is so stupid
+            // these lines are so stupid
             tk.subt = nil
+            subtasks = nil
             // if tk.subt is not set to nil, then the same array would
             // go to every other task subtask array that follows
         }
@@ -859,136 +875,6 @@ func mark( search query ) {
 
 
 // -----------------------------------------------------------------------------
-//   sanitize( commands []string ) query
-//
-//   Revn: 03-02-2022
-//   Args: commands - array of strings
-//                    list of commands, should begin with "show" here
-//                    any subcommands specify what is to be shown
-//   Retn: search   - query
-//                    object that shows what user is looking for
-//   Func: Creates query structure from user input, sends to show()
-//   TODO: add debug flag
-//         integrate with show()
-// -----------------------------------------------------------------------------
-//   CHANGE LOG
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-//   ??-??-????: wrote bones
-//   02-22-2022: made change log
-//               began planning process
-//               changed from show() to sanitize()
-//               wrote commands[] case 1, 2, and 3; began 5
-//   02-23-2022: changed searchable to query
-//               limited scope tremendously to expedite a stable
-//                  release. currently only handles 3 inputs,
-//                  including initial show command
-//   02-24-2022: tested function (successfully)
-//               added call to show()
-//               commented
-//   03-02-2022: pulled length out of switch and into case, letting me
-//                  use it like a big if/else
-//               changed case to allow for len greater than 3
-//
-// -----------------------------------------------------------------------------
-func sanitize( commands []string ) query {
-
-    length := len( commands )   // capture as variable for readability
-
-    var search query            // declare searchable object
-
-    //TODO
-    // remove switch variable to allow for  multiword searchable
-    // commands
-    switch {
-        case length == 1:       // -> show
-            // in the absense of a board or subcommand, imply user
-            // meant show all
-            // in the future, this may turn into a call to a whole
-            // subfunction that prompts the user for individual pieces
-            // of information
-            search.subcom = "all"
-        case length == 2:       // -> show all
-                    // -> show work
-            // len 2 can only mean that a subcommand has been called
-            // or the user implied a board
-            if commands[1] == "all" {   // check for only current
-                                        // subcommand
-                search.subcom = "all"
-            } else {                    // only other option is board
-                // assume commands[1] is the name of a board
-                search.board = commands[1]
-            }
-        case length >= 3:       // -> show board work
-                                // -> show task litter
-                                // -> show subtask dishes
-            // three options here are board, task, and subtask
-            // new switch/case to see who is who
-            // if commands[1] is an acceptable "object", like a board,
-            // then commands[2] should be the name of said object
-            switch commands[1] {
-                case "board":
-                    search.board = commands[2]
-                case "task":
-                    search.task = commands[2]
-                case "subtask":
-                    search.subtask = commands[2]
-                default:    // if not an acceptable "object",
-                            // print error message, call help()
-                            // and leave
-                    print()
-                    print( "Object /" + commands[1] + "/ does not exist" )
-                    failure := []string{ "help" }
-                    help( failure )
-            }
-        }
-//        case 5:
-//            switch commands[1] {
-//                case "board":
-//                case "task":
-//                case "subtask":
-//                default:
-//            }
-
-            // FIXME
-            // what if commands[1] == commands[3]??
-            // how do I make a second searchable in this scope?
-            // how many searchables are needed???
-
-            //TODO
-            // possible solution: create query based on FIRST
-            //                      criterion
-            //                    remove used input from commands[]
-            //                    send to show()
-            //                    sanitize( alteredCommands )
-            //                    make new query, repeat
-//            switch commands[3] {
-//                case "board":
-//                case "task":
-//                case "subtask":
-//                default:
-//            }
-
-//        default:
-//            print()
-//            print( "Input not recognized." )
-//            showFailure := []string{ "help", "show" }
-//            help( showFailure )
-//    }
-
-    // XXX
-    // test how sanitize() works
-    //print( "Search Query" )
-    //print( "\t  Board: " + search.board )
-    //print( "\t   Task: " + search.task )
-    //print( "\tSubtask: " + search.subtask )
-    //print( "\t Subcom: " + search.subcom )
-
-    return search
-
-}
-
-
-// -----------------------------------------------------------------------------
 //   parse( commands []string )
 //
 //   Revn: 03-10-2022 
@@ -1507,7 +1393,7 @@ type task struct {
 // that relates strings         string
 // to an array of tasks                []task
 var boards = make( map[string][]task )
-var tasks []task    // the array of tasks referenced above
+var tasks []task        // array of tasks referenced above
 var subtasks []subtask  // array of subtasks belonging to tasks
 
 
