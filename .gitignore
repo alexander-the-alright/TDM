@@ -1,6 +1,10 @@
 .gitignore
 
 data
+d
 
 else.go
+parse.go
 tomorrow
+
+funcs
