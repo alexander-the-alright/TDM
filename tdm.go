@@ -1,7 +1,7 @@
 // =============================================================================
 // Auth: Alex Celani
 // File: tdm.go
-// Revn: 03-27-2022  2.0
+// Revn: 03-29-2022  3.0
 // 
 // Func: display and manage progress of a litany of items to be done,
 //       with an organization scheme similar to Trello. It's CLI
@@ -17,7 +17,6 @@
 //       auto-update task fill based on subtask fills and (settable)
 //          weighting
 // M     remember last args
-//       handle ^C gracefully
 //       move most (read: all) helper functions to external files
 // M     add priority to tasks
 //       attach text files???
@@ -34,7 +33,7 @@
 // =============================================================================
 //                                 JUMP TAGS
 //    for the lucky few who use vim, press * on a tag to jump to that function
-//     INPUT JOIN FILEIN FILEOUT HELP DELETE FIND СДЕЛАЙ MARK PARSE SHOW MAIN
+//  CATCH INPUT JOIN FILEIN FILEOUT HELP DELETE FIND СДЕЛАЙ MARK PARSE SHOW MAIN
 // =============================================================================
 // CHANGE LOG
 // -----------------------------------------------------------------------------
@@ -109,6 +108,8 @@
 // 03-20-2022: first draft rewrite of find()
 //*03-27-2022: fixed bug where tasks can't be made under boards with
 //                  name of length 1
+//*03-29-2022: added, tested, and commented function for catching
+//                  keyboard interrupts
 //
 // =============================================================================
 
@@ -120,6 +121,8 @@ import (
     "strings"       // used for Split, ToLower, Join
     "strconv"       // used for Atoi
     "os"            // used for Exit, Stdin
+    "os/signal"     // used for Notify
+    "syscall"       // used for SIGTERM
     "io/ioutil"     // used for ReadFile, WriteFile
     "bufio"         // used for NewScanner
 )
@@ -136,6 +139,34 @@ var itoa   = strconv.Itoa
 var exit   = os.Exit
 var read   = ioutil.ReadFile
 var write  = ioutil.WriteFile
+
+
+// CATCH    finally something fun
+// asynchronous function that catches keyboard interrupts and exits
+// gracefully
+func catch() {
+    // blocking channel of type signal
+    c := make( chan os.Signal )
+
+    // I didn't read what this does, but it was in an example and it
+    // worked, so
+    // from what I can ascertain, when SIGTERM is detected, it binds
+    // Interrupt to channel c
+    signal.Notify( c, os.Interrupt, syscall.SIGTERM )
+
+    // asynchronous goroutine
+    go func() {
+        <-c     // immediately halts in blocking read for signal
+
+        if changed {    // if there was a change to the map...
+            fileOut()   // rewrite data file
+        }
+
+        print( "\r" )   // this helps with the missing newline
+
+        exit( 0 )   // and exit gracefully
+   }()
+}
 
 
 // INPUT
@@ -1495,7 +1526,9 @@ var subtasks []subtask  // array of subtasks belonging to tasks
 // MAIN
 func main() {
 
-    fileIn()
+    catch()     // call function to catch keyboard interrupts
+
+    fileIn()    // open data file, process into structure
 
     for {       // infinite loop, where everything happens
 
@@ -1540,7 +1573,7 @@ func main() {
                     fileOut()
                 }
 
-                os.Exit( 0 )    // exeunt
+                exit( 0 )    // exeunt
             case "set":
             // XXX
                 // turn debug flag on and off
