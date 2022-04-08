@@ -1,7 +1,7 @@
 // =============================================================================
 // Auth: Alex Celani
 // File: tdm.go
-// Revn: 03-29-2022  3.0
+// Revn: 04-07-2022  3.1
 // 
 // Func: display and manage progress of a litany of items to be done,
 //       with an organization scheme similar to Trello. It's CLI
@@ -110,6 +110,8 @@
 //                  name of length 1
 //*03-29-2022: added, tested, and commented function for catching
 //                  keyboard interrupts
+// 04-07-2022: fixed bug where task fill did not persist when task
+//                  contained subtasks
 //
 // =============================================================================
 
@@ -393,6 +395,7 @@ func fileIn() {
             }
             // separate task from fill
             tContents := split( tTasks[b], "," )
+
             // if there is no fill, interpret this as 0 fill
             if len( tContents[1] ) == 0 {
                 // inferred fill is a string, so it can be processed
@@ -400,7 +403,8 @@ func fileIn() {
                 tContents[1] = "0"
             }
             tk.name = tContents[0]          // set name of task
-            fil, _ := atoi( tContents[1] )  // convert fill to int
+            // convert fill to int
+            fil, _ := atoi( split( tContents[1], ":" )[0] )
             tk.fill = fil                   // set fill of task
             tasks = append( tasks, tk )     // add task to task array
 
