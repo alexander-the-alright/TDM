@@ -1,7 +1,7 @@
 // =============================================================================
 // Auth: Alex Celani
 // File: tdm.go
-// Revn: 04-07-2022  3.1
+// Revn: 04-11-2022  3.3
 // 
 // Func: display and manage progress of a litany of items to be done,
 //       with an organization scheme similar to Trello. It's CLI
@@ -14,8 +14,6 @@
 //       make subsubtasks for greater depth
 // M        or rooms to contain boards
 //       handle command line args
-//       auto-update task fill based on subtask fills and (settable)
-//          weighting
 // M     remember last args
 //       move most (read: all) helper functions to external files
 // M     add priority to tasks
@@ -33,7 +31,8 @@
 // =============================================================================
 //                                 JUMP TAGS
 //    for the lucky few who use vim, press * on a tag to jump to that function
-//  CATCH INPUT JOIN FILEIN FILEOUT HELP DELETE FIND СДЕЛАЙ MARK PARSE SHOW MAIN
+//                    CALC CATCH INPUT JOIN FILEIN FILEOUT
+//                HELP DELETE FIND СДЕЛАЙ MARK PARSE SHOW MAIN
 // =============================================================================
 // CHANGE LOG
 // -----------------------------------------------------------------------------
@@ -112,6 +111,9 @@
 //                  keyboard interrupts
 // 04-07-2022: fixed bug where task fill did not persist when task
 //                  contained subtasks
+// 04-10-2022: changed type of fill in task/subtask from int to string
+// 04-11-2022: wrote, tested, and integrated calc() into show() and
+//                  сделай()
 //
 // =============================================================================
 
@@ -141,6 +143,36 @@ var itoa   = strconv.Itoa
 var exit   = os.Exit
 var read   = ioutil.ReadFile
 var write  = ioutil.WriteFile
+
+
+// CALC
+// quick little function that calculates the average fill of the
+// subtasks contained inside of a task
+func calc( t task ) string {
+
+    // init counter
+    var count int = 0
+    // grab length to determine if count is necessary
+    var tlen int = len( t.subt )
+
+    // simply don't iterate if []subtask is empty
+    if tlen != 0 {
+        // otherwise, iterate over subtasks
+        for _, sub := range t.subt {
+            // convert to int for addition
+            fill, err := atoi( sub.fill )
+
+            if err != nil {     // if conversion returns and error...
+                fill = 0        // just default to 0
+            }                   // sux, just enter a valid fill, idiot
+
+            count = count + fill    // continue counting up
+        }
+        count = count / tlen        // actually make it an average
+    }
+
+    return itoa( count )            // return conversion to string
+}
 
 
 // CATCH    finally something fun
@@ -227,16 +259,7 @@ func fileOut() {
             data = data + tcontents.name    // add task name
             data = data + ","               // XXX task delimiter
 
-            // convert fill back to ascii
-            // no error, because I guess all ints can be converted to
-            // ascii, but not all ascii can be an int?
-            // TODO think about keeping fill as ascii
-            // maybe check the conversion to see if it worked (i.e.
-            // user entered a number), but the ints are never
-            // _actually_ used
-            fill := itoa( tcontents.fill )
-
-            data = data + fill              // add task fill
+            data = data + tcontents.fill    // add task fill
             // does the task contain subtasks?
             if len( tcontents.subt ) != 0 {
                 // XXX task's subtask delimiter
@@ -252,7 +275,7 @@ func fileOut() {
                         print( "pre data: ", data )
                     }
 
-
+                    // add subtask name
                     data = data + scontents.name
 
                     // XXX
@@ -262,11 +285,8 @@ func fileOut() {
 
                     data = data + ">"       // XXX subtask fill delim
 
-                    // convert fill back to ascii
-                    // TODO as above
-                    fill = itoa( scontents.fill )
-
-                    data = data + fill      // add subtask fill
+                    // add subtask fill
+                    data = data + scontents.fill
 
                     // check if NOT last subtask
                     if sind != len( tcontents.subt ) - 1 {
@@ -383,10 +403,9 @@ func fileIn() {
                 for c := 0; c < len( sTasks ); c++ {
                     // split subtasks name from fill
                     sContents := split( sTasks[c], ">" )
-                    // convert fill from string to int, discard err
-                    fil, _ := atoi( sContents[1] )
                     // create subtask object with this extracted info
-                    stk := subtask { name: sContents[0], fill: fil }
+                    stk := subtask { name: sContents[0],
+                                     fill: sContents[1] }
                     // add subtask object to array of such
                     subtasks = append( subtasks, stk )
                 }
@@ -400,12 +419,14 @@ func fileIn() {
             if len( tContents[1] ) == 0 {
                 // inferred fill is a string, so it can be processed
                 // like all the other fills
-                tContents[1] = "0"
+                tContents[1] = "x"
             }
             tk.name = tContents[0]          // set name of task
             // convert fill to int
-            fil, _ := atoi( split( tContents[1], ":" )[0] )
-            tk.fill = fil                   // set fill of task
+            // tContents[1] contains ALL contents of task
+            // splitting over : separates fill from subtasks
+            // split()[0] is fill
+            tk.fill = split( tContents[1], ":" )[0]
             tasks = append( tasks, tk )     // add task to task array
 
             // XXX
@@ -729,7 +750,7 @@ func find( search query ) ( string, int, int ) {
 // -----------------------------------------------------------------------------
 //   СДЕЛАЙ( search query )
 //
-//   Revn: 03-27-2022
+//   Revn: 04-11-2022
 //   Args: search - query
 //                  object that summarizes what needs making
 //   Func: create new boards, tasks, and subtasks
@@ -742,6 +763,7 @@ func find( search query ) ( string, int, int ) {
 //   03-10-2022: commented
 //   03-16-2022: rewrote to work with updated query{} definition
 //   03-27-2022: added check for command == "fail"
+//   04-11-2022: made auto-update the default for task fill
 //
 // -----------------------------------------------------------------------------
 func сделай( search query ) {
@@ -792,7 +814,9 @@ func сделай( search query ) {
             } else {                    // board is specified
                 exists = true           // signal parent did exist
                 // create task with user-given name
-                tk := task{ name: search.task }
+                // and default to auto-update task fill
+                tk := task{ name: search.task, 
+                            fill: "x" }
                 // grab []task that given board maps to
                 // i literally don't want to type search.board out two
                 // more times, v clunky and causes line overrun
@@ -874,7 +898,7 @@ func сделай( search query ) {
 // -----------------------------------------------------------------------------
 //   MARK( search query )
 //
-//   Revn: 03-17-2022
+//   Revn: 04-10-2022
 //   Args: search - query
 //                  object that summarizes what needs showing
 //   Func: allow user to complete tasks
@@ -893,6 +917,7 @@ func сделай( search query ) {
 //   03-11-2022: added reference to variable 'change', so fileOut()
 //                  will run
 //   03-17-2022: added references to updated definition of a query
+//   04-10-2022: replaced fill setting with string type instead of int
 //
 // -----------------------------------------------------------------------------
 func mark( search query ) {
@@ -915,13 +940,8 @@ func mark( search query ) {
     // z -> ( int ) index of subtask array for a given task
     x, y, z := find( search )
     
-    // index of last item           len( commands ) - 1
-    // last item in array  commands[len( commands ) - 1]
-    // convert string to int
-    //               atoi( commands[len( commands ) - 1] )
-    // markFill -> converted value
-    // err      -> contains value of atoi() error
-    //             would happen if passed value isn't ascii
+    // markFill isn't actually used anymore, but it's good for input
+    // sanitization
     markFill, err := atoi( search.subB )
     
     // on error, print failure, call help about it, return
@@ -947,7 +967,7 @@ func mark( search query ) {
                 // boards[x]         -> []task
                 // boards[x][y]      -> task
                 // boards[x][y].fill -> task.fill, fill field in task
-                boards[x][y].fill = markFill
+                boards[x][y].fill = search.subB
                 changed = true  // signal that file needs rewriting
             } else {       // yes subtask
                 // boards                    -> map[string][]task
@@ -956,7 +976,7 @@ func mark( search query ) {
                 // boards[x][y].subt         -> []subtask
                 // boards[x][y].subt[z]      -> subtask
                 // boards[x][y].subt[z].fill -> subtask.fill
-                boards[x][y].subt[z].fill = markFill
+                boards[x][y].subt[z].fill = search.subB
                 changed = true  // signal that file needs rewriting
             }
         }
@@ -1035,7 +1055,7 @@ func parse( commands []string ) query {
     // big switch statement over command
     switch comm {
         // these don't really need processing, break out immediately
-        case "save", "set", "quit", "exit":
+        case "save", "set", "quit", "exit", "calc":
             return search
         case "delete":
             // there are only so many types of commands that work here
@@ -1292,7 +1312,7 @@ func parse( commands []string ) query {
 // -----------------------------------------------------------------------------
 //   SHOW( search query )
 //
-//   Revn: 03-27-2022
+//   Revn: 04-11-2022
 //   Args: search - query
 //                  object that summarizes what needs showing
 //   Func: display stored information to the user
@@ -1313,6 +1333,8 @@ func parse( commands []string ) query {
 //   03-16-2022: updated to switch/case system to work with the new
 //                  version of parse()
 //   03-27-2022: removed 1.x version
+//   04-11-2022: changed task fill in to use calc() in /all/, /board/,
+//                  and /task/
 //
 // -----------------------------------------------------------------------------
 func show( search query ) {
@@ -1343,9 +1365,18 @@ func show( search query ) {
                     // print task name, right justified (with respect
                     // to the indent)
                     printf( "%-16s", showTask.name )
+                    // init string to contain task fill
+                    var showTaskFill string
+                    // if task fill is in auto mode
+                    if showTask.fill == "x" {
+                        // call averaging method over task
+                        showTaskFill = calc( showTask )
+                    } else {    // otherwise, grab fill as usual
+                        showTaskFill = showTask.fill
+                    }
                     // print task fill, left justified
                     // indent len 4 + 16 = 20
-                    printf( "%16d\n", showTask.fill )
+                    printf( "%16s\n", showTaskFill )
                     // iterate over the task's subtasks
                     for _, showSubtask := range showTask.subt {
                         // double indent
@@ -1356,7 +1387,7 @@ func show( search query ) {
                         printf( "%-16s", showSubtask.name )
                         // print subtask fill, left justified
                         // indent len 8 + 12 = 20
-                        printf( "%12d\n", showSubtask.fill )
+                        printf( "%12s\n", showSubtask.fill )
                     }
                 }
             }
@@ -1374,9 +1405,18 @@ func show( search query ) {
                     // print task name, right justified (with respect
                     // to the indent)
                     printf( "%-16s", showTask.name )
+                    // init string to contain task fill
+                    var showTaskFill string
+                    // if task fill is in auto mode
+                    if showTask.fill == "x" {
+                        // call averaging method over task
+                        showTaskFill = calc( showTask )
+                    } else {    // otherwise, grab fill as usual
+                        showTaskFill = showTask.fill
+                    }
                     // print task fill, left justified
                     // indent len 4 + 16 = 20
-                    printf( "%16d\n", showTask.fill )
+                    printf( "%16s\n", showTaskFill )
                     for _, showSubtask := range showTask.subt {
                         // double indent
                         // double indent has len 8
@@ -1386,7 +1426,7 @@ func show( search query ) {
                         printf( "%-12s", showSubtask.name )
                         // print subtask fill, left justified
                         // indent len 8 + 12 = 20
-                        printf( "%16d\n", showSubtask.fill )
+                        printf( "%16s\n", showSubtask.fill )
                     }
                 }
             } else {    // if board DNE
@@ -1412,8 +1452,17 @@ func show( search query ) {
                         print( showBoard )
                         // print task name with same justification
                         printf( "%-16s", showTask.name )
+                        // init string to contain task fill
+                        var showTaskFill string
+                        // if task fill is in auto mode
+                        if showTask.fill == "x" {
+                            // call averaging method over task
+                            showTaskFill = calc( showTask )
+                        } else {    // otherwise, grab fill as usual
+                            showTaskFill = showTask.fill
+                        }
                         // print task fill with right justification
-                        printf( "%20d\n", showTask.fill )
+                        printf( "%20s\n", showTaskFill )
                         // iterate over contained subtasks
                         for _, showSubtask := range showTask.subt {
                             // print indent
@@ -1421,7 +1470,7 @@ func show( search query ) {
                             // print subtask name left justified
                             printf( "%-16s", showSubtask.name )
                             // print subtask fill right justified
-                            printf( "%16d\n", showSubtask.fill )
+                            printf( "%16s\n", showSubtask.fill )
                         }
                     }
                 }
@@ -1455,7 +1504,7 @@ func show( search query ) {
                             // print subtask name left justified
                             printf( "%-16s", showSubtask.name )
                             // print subtask fill right justified
-                            printf( "%20d\n", showSubtask.fill )
+                            printf( "%20s\n", showSubtask.fill )
                         }
                     }
                 }
@@ -1480,7 +1529,7 @@ func show( search query ) {
 }
 
 var flag bool = false       // debug flag
-var changed bool = false
+var changed bool = false    // keep track of if file is changed
 
 
 // struct used for defining search parameters
@@ -1497,7 +1546,7 @@ type query struct {
 /*
 type subsubtask struct {
     name string         // subsubtasks are named
-    fill int            // subsubtasks contain progress
+    fill string         // subsubtasks contain progress
     //note string         // subsubtasks can contain files
 }
 */
@@ -1505,7 +1554,7 @@ type subsubtask struct {
 // struct used for defining what constitutes a 'subtask'
 type subtask struct {
     name string         // subtasks are named
-    fill int            // subtasks contain progress
+    fill string         // subtasks contain progress
     //ssbt []subsubtask     // subtasks can contain subsubtasks
     //note string         // subtasks can contain files
 }
@@ -1514,7 +1563,7 @@ type subtask struct {
 // struct used for defining what constitutes a 'task'
 type task struct {
     name string         // tasks are named
-    fill int            // tasks contain progress
+    fill string         // tasks contain progress
     subt []subtask      // tasks can contain subtasks
     //note string         // tasks can contain files
 }
