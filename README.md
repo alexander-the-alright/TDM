@@ -10,6 +10,8 @@ having a hard time getting Rust to be happy about variable-sized maps.
 
 [GoLang](https://go.dev/doc/install) needs to be installed already.
 
+Recommended to compile, rather than run inline.
+
 ## Usage
 
 Run TDM with
@@ -18,7 +20,13 @@ Run TDM with
 ./tdm
 ```
 
-Once inside, you can run the following forms of commands:
+Can also be run with command line arguments, for example
+
+```sh
+./tdm mark task update readme 75
+```
+
+TDM supports the following forms of commands:
 
 ### Delete
 Delete the requested argument.
