@@ -1,7 +1,7 @@
 // =============================================================================
 // Auth: Alex Celani
 // File: tdm.go
-// Revn: 04-11-2022  3.3
+// Revn: 04-12-2022  5.0
 // 
 // Func: display and manage progress of a litany of items to be done,
 //       with an organization scheme similar to Trello. It's CLI
@@ -9,11 +9,9 @@
 //
 // TODO: add debug statements
 //
-//       fix issue where fileIn() breaks on empty board
 //       add second object to hold command information
 //       make subsubtasks for greater depth
 // M        or rooms to contain boards
-//       handle command line args
 // M     remember last args
 //       move most (read: all) helper functions to external files
 // M     add priority to tasks
@@ -112,8 +110,10 @@
 // 04-07-2022: fixed bug where task fill did not persist when task
 //                  contained subtasks
 // 04-10-2022: changed type of fill in task/subtask from int to string
-// 04-11-2022: wrote, tested, and integrated calc() into show() and
+//*04-11-2022: wrote, tested, and integrated calc() into show() and
 //                  сделай()
+//*04-12-2022: calls to os.Args in main() to work with cmd line args
+//             fixed bug where fileIn() crashes on empty board
 //
 // =============================================================================
 
@@ -124,7 +124,7 @@ import (
     "fmt"           // used for Println
     "strings"       // used for Split, ToLower, Join
     "strconv"       // used for Atoi
-    "os"            // used for Exit, Stdin
+    "os"            // used for Exit, Stdin, Args
     "os/signal"     // used for Notify
     "syscall"       // used for SIGTERM
     "io/ioutil"     // used for ReadFile, WriteFile
@@ -199,7 +199,7 @@ func catch() {
         print( "\r" )   // this helps with the missing newline
 
         exit( 0 )   // and exit gracefully
-   }()
+    }()
 }
 
 
@@ -378,6 +378,15 @@ func fileIn() {
         // XXX
         if flag {   // if debug set, print board name
             print( "board name -> ", bName )
+        }
+
+        // if there is no text right of the task marker
+        if len( bTasks ) == 0 {
+            // literally just initialize a new empty array of tasks
+            // and add to the map with the board name
+            boards[bName] = []task{}
+            continue        // jump to the next board because
+                            // there's no contents to process
         }
 
         // separate tasks from each other
@@ -1585,18 +1594,36 @@ func main() {
 
     for {       // infinite loop, where everything happens
 
-        userIn := input( "-> " )        // take user input
-        ui := split( userIn, " " )      // split over spaces
+        // declare array of strings to contain user input
+        var ui []string
+        // and quick flag to keep track of operation mode:
+        // cmd line args or inline?
+        var cmd bool = false
+
+        // check to see if there was a given argument
+        if len( os.Args[1:] ) > 0 {     // if yes
+            ui = os.Args[1:]        // declare ui as list of args
+
+            // XXX
+            if flag {   // if debug set, print arguments list
+                print( ui )
+            }
+
+            cmd = true              // set cmd line args flag
+        } else {                        // if no
+            userIn := input( "-> " )        // take user input
+            ui = split( userIn, " " )       // split over spaces
+        }
+
         command := ui[0]                // first entry is command
         // convention: send entire array to subfunction, do not strip
         // any subcommands off
 
-        // switch case over command
-        // recognize user input, call appropriate command
-
+        // process the user input
         var search query = parse( ui )
 
-        
+        // switch case over command
+        // recognize user input, call appropriate command
         switch command {
             case "delete":
                 del( search )
@@ -1617,6 +1644,7 @@ func main() {
                 show( search )
             case "exit", "quit":
 
+                // XXX
                 if flag {   // if debug set, print if file was changed
                     print( changed )
                 }
@@ -1636,6 +1664,15 @@ func main() {
                 flag = ui[len( ui ) - 1] == "true"
             default:            // if the input is unrecognized
                 continue        // try again
+        }
+
+        // if cmd line arg mode, only run once, break infinite loop
+        if cmd {
+            // if file was changed, rewrite to file
+            if changed {
+                fileOut()
+            }
+            break
         }
     }
 }
