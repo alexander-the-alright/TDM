@@ -1,13 +1,13 @@
 // =============================================================================
 // Auth: Alex Celani
 // File: tdm.go
-// Revn: 04-12-2022  5.0
+// Revn: 04-14-2022  5.1
 // 
 // Func: display and manage progress of a litany of items to be done,
 //       with an organization scheme similar to Trello. It's CLI
 //       Trello
 //
-// TODO: add debug statements
+// TODO: rewrite help
 //
 //       add second object to hold command information
 //       make subsubtasks for greater depth
@@ -16,7 +16,6 @@
 //       move most (read: all) helper functions to external files
 // M     add priority to tasks
 //       attach text files???
-//       fix data storage issue
 //       contemplate adding XOR of data in file, altho who cares
 //       contemplate adding battery of tests
 //       contemplate moving functions to external file
@@ -114,6 +113,10 @@
 //                  сделай()
 //*04-12-2022: calls to os.Args in main() to work with cmd line args
 //             fixed bug where fileIn() crashes on empty board
+// 04-14-2022: moved data file to home directory with os.UserHomeDir()
+//                  changed arguments for fileIn() and fileOut()
+//             added quick little subcommands in show() and parse()
+//                  /show/ to print boards or tasks
 //
 // =============================================================================
 
@@ -124,7 +127,7 @@ import (
     "fmt"           // used for Println
     "strings"       // used for Split, ToLower, Join
     "strconv"       // used for Atoi
-    "os"            // used for Exit, Stdin, Args
+    "os"            // used for Exit, Stdin, Args, UserHomeDir
     "os/signal"     // used for Notify
     "syscall"       // used for SIGTERM
     "io/ioutil"     // used for ReadFile, WriteFile
@@ -141,6 +144,7 @@ var lower  = strings.ToLower
 var atoi   = strconv.Atoi
 var itoa   = strconv.Itoa
 var exit   = os.Exit
+var dir    = os.UserHomeDir
 var read   = ioutil.ReadFile
 var write  = ioutil.WriteFile
 
@@ -193,7 +197,7 @@ func catch() {
         <-c     // immediately halts in blocking read for signal
 
         if changed {    // if there was a change to the map...
-            fileOut()   // rewrite data file
+            fileOut( home )   // rewrite data file
         }
 
         print( "\r" )   // this helps with the missing newline
@@ -234,7 +238,7 @@ func join( subcommands []string ) string {
 
 // FILEOUT
 // wrapper function to contain all the file writing
-func fileOut() {
+func fileOut( home string ) {
 
     // initialize data to be written as empty string
     var data string = ""
@@ -309,7 +313,7 @@ func fileOut() {
     // cast writestring to byte array, write to file named "data"
     // if a file doesn't exist, make with 0x644 permissions
     // take error as err, if fails
-    err := write( "data", []byte( data ), 0644 )
+    err := write( home + "/data", []byte( data ), 0644 )
 
     if flag {   // if debug set, print data written
         print( data )
@@ -325,7 +329,7 @@ func fileOut() {
 
 // FILEIN
 // warpper function to contain all the file reading
-func fileIn() {
+func fileIn( home string ) {
     
     // test string to use in lieu of a file
     // file := 
@@ -348,7 +352,7 @@ func fileIn() {
     //           >30    >30                           ~ subtask fill
     //           >      >                             ~ subtask fill delim
 
-    file, err := read( "data" )         // open file, failure set err
+    file, err := read( home + "/data" )         // open file, failure set err
 
     // declare board, because if statement gets mad if I don't
     var board []string
@@ -1011,7 +1015,7 @@ func mark( search query ) {
 // -----------------------------------------------------------------------------
 //   PARSE( commands []string )
 //
-//   Revn: 03-27-2022
+//   Revn: 04-14-2022
 //   Args: commands - []string
 //                    list of commands of what board, task, or subtask
 //                    to make
@@ -1044,6 +1048,8 @@ func mark( search query ) {
 //   03-27-2022: fixed bug in /make/ where tasks under boards with
 //                  names of length 1 failed ( literally changed "> 1"
 //                  to "> 0" )
+//   04-14-2022: added recognition to /boards/ and /tasks/ subcommand
+//                  inside of /show/
 //
 // -----------------------------------------------------------------------------
 func parse( commands []string ) query {
@@ -1064,7 +1070,7 @@ func parse( commands []string ) query {
     // big switch statement over command
     switch comm {
         // these don't really need processing, break out immediately
-        case "save", "set", "quit", "exit", "calc":
+        case "save", "set", "quit", "exit":
             return search
         case "delete":
             // there are only so many types of commands that work here
@@ -1105,8 +1111,6 @@ func parse( commands []string ) query {
                         search.board = join( subcommands[:] )
                     }
             }
-        case "help":
-//            help( subcommands )
         case "make":
             //      -> make <board>
             //      -> make board <b>
@@ -1266,6 +1270,12 @@ func parse( commands []string ) query {
                 search.subA = "all"
             } else {
                 switch subcommands[0] {
+                    case "boards", "tasks":
+                        // show boards
+                        // show tasks
+                        // iterate through just the names of the
+                        // boards/tasks
+                        search.subA = subcommands[0]
                     case "task":
                         // show task xyz
                         // set focus to task
@@ -1445,6 +1455,12 @@ func show( search query ) {
                 help( showFailure )
                 return
             }
+        case "boards":
+            // literally just print the names of all the boards
+            // just a compact version of "show all"
+            for showBoard, _ := range boards {
+                print( showBoard )
+            }
         case "task":
             // can check if a board is present with _, prs :=
             // but this is a flag to be set if a task exists
@@ -1491,6 +1507,16 @@ func show( search query ) {
                 showFailure := []string{ "help", "show" }
                 help( showFailure )
                 return
+            }
+        case "tasks":
+            // compact version of showing all boards and their tasks
+            // no subtasks tho, thats just show all
+            // doesn't print any fills or anything like that, simple
+            for showBoard, contents := range boards {
+                print( showBoard )
+                for _, showTask := range contents {
+                    print( "\t" + showTask.name )
+                }
             }
         case "subtask":
             // can check if a board is present with _, prs :=
@@ -1584,13 +1610,21 @@ type task struct {
 var boards = make( map[string][]task )
 var tasks []task        // array of tasks referenced above
 var subtasks []subtask  // array of subtasks belonging to tasks
+var home string         // declare string to keep track of home dir
 
 // MAIN
 func main() {
 
+    // get home directory from user
+    home, err := dir()
+
+    if err != nil {     // check if home dir failed
+        panic( err )    // panic if so
+    }
+
     catch()     // call function to catch keyboard interrupts
 
-    fileIn()    // open data file, process into structure
+    fileIn( home )    // open data file, process into structure
 
     for {       // infinite loop, where everything happens
 
@@ -1637,7 +1671,7 @@ func main() {
             case "mark":
                 mark( search )
             case "save":
-                fileOut()
+                fileOut( home )
                 changed = false
                 print( "Updates saved" )
             case "show":
@@ -1651,7 +1685,7 @@ func main() {
 
                 // if file was changed, rewrite to file
                 if changed {
-                    fileOut()
+                    fileOut( home )
                 }
 
                 exit( 0 )    // exeunt
@@ -1670,7 +1704,7 @@ func main() {
         if cmd {
             // if file was changed, rewrite to file
             if changed {
-                fileOut()
+                fileOut( home )
             }
             break
         }
