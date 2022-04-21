@@ -1,15 +1,13 @@
 // =============================================================================
 // Auth: Alex Celani
 // File: tdm.go
-// Revn: 04-14-2022  5.1
+// Revn: 04-20-2022  5.2
 // 
 // Func: display and manage progress of a litany of items to be done,
 //       with an organization scheme similar to Trello. It's CLI
 //       Trello
 //
-// TODO: rewrite help
-//
-//       add second object to hold command information
+// TODO: add second object to hold command information
 //       make subsubtasks for greater depth
 // M        or rooms to contain boards
 // M     remember last args
@@ -117,6 +115,10 @@
 //                  changed arguments for fileIn() and fileOut()
 //             added quick little subcommands in show() and parse()
 //                  /show/ to print boards or tasks
+// 04-15-2022: added new function, Help() for when functions fail
+//             added /about/ section to help()
+// 04-20-2022: fixed bug where keyboard interrupts would fail to write
+//                  data out to file
 //
 // =============================================================================
 
@@ -165,16 +167,13 @@ func calc( t task ) string {
         for _, sub := range t.subt {
             // convert to int for addition
             fill, err := atoi( sub.fill )
-
             if err != nil {     // if conversion returns and error...
                 fill = 0        // just default to 0
             }                   // sux, just enter a valid fill, idiot
-
             count = count + fill    // continue counting up
         }
         count = count / tlen        // actually make it an average
     }
-
     return itoa( count )            // return conversion to string
 }
 
@@ -197,7 +196,7 @@ func catch() {
         <-c     // immediately halts in blocking read for signal
 
         if changed {    // if there was a change to the map...
-            fileOut( home )   // rewrite data file
+            fileOut()   // rewrite data file
         }
 
         print( "\r" )   // this helps with the missing newline
@@ -238,7 +237,7 @@ func join( subcommands []string ) string {
 
 // FILEOUT
 // wrapper function to contain all the file writing
-func fileOut( home string ) {
+func fileOut() {
 
     // initialize data to be written as empty string
     var data string = ""
@@ -310,11 +309,24 @@ func fileOut( home string ) {
         }
     }
 
+    // get home directory from user
+    home, err := dir()
+
+    if err != nil {     // check if home dir failed
+        panic( err )    // panic if so
+    }
+
+    // XXX
+    if flag {   // if debug set, print home directory
+        print( "home (fO): ", home )
+    }
+
     // cast writestring to byte array, write to file named "data"
     // if a file doesn't exist, make with 0x644 permissions
     // take error as err, if fails
-    err := write( home + "/data", []byte( data ), 0644 )
+    err = write( home + "/data", []byte( data ), 0644 )
 
+    // XXX
     if flag {   // if debug set, print data written
         print( data )
     }
@@ -329,7 +341,7 @@ func fileOut( home string ) {
 
 // FILEIN
 // warpper function to contain all the file reading
-func fileIn( home string ) {
+func fileIn() {
     
     // test string to use in lieu of a file
     // file := 
@@ -351,6 +363,18 @@ func fileIn( home string ) {
     //              .                                 ~ subtask delim
     //           >30    >30                           ~ subtask fill
     //           >      >                             ~ subtask fill delim
+
+    // get home directory from user
+    home, err := dir()
+
+    if err != nil {     // check if home dir failed
+        panic( err )    // panic if so
+    }
+
+    // XXX
+    if flag {   // if debug set, print home directory
+        print( "home (fI): ", home )
+    }
 
     file, err := read( home + "/data" )         // open file, failure set err
 
@@ -470,7 +494,7 @@ func fileIn( home string ) {
 // -----------------------------------------------------------------------------
 //   HELP( commands []string )
 //
-//   Revn: 03-10-2022
+//   Revn: 04-14-2022
 //   Args: commands - array of strings
 //                    list of commands, should begin with "help" here
 //                    any subcommands would specify with which
@@ -494,6 +518,7 @@ func fileIn( home string ) {
 //   03-10-2022: rewrote /delete/ to reflect new scope
 //               removed /move/ and /choose/ portions, because those
 //                  commands were removed
+//   04-15-2022: added /about/ section
 //
 // -----------------------------------------------------------------------------
 func help( commands []string ) {
@@ -564,9 +589,140 @@ func help( commands []string ) {
         print( " quit" )
         print( "   \\-- exit program" )    
     }
-
+    if helpFlag || c == "save" {
+        print( " save" )
+        print( "   \\-- save changes to file without exiting" )
+    }
+    if c == "about" {
+        print( " about" )
+        print( "   \\-- kanban board in the terminal" )
+    }
     print()     // print extra line to avoid cluttered look
 
+}
+
+
+// -----------------------------------------------------------------------------
+//   HELP( command string )
+//
+//   Revn: 04-15-2022
+//   Args: commands - string
+//   Func: more in depth help messages than the normal function, to be
+//         called from a different function
+//   TODO: rewrite?
+// -----------------------------------------------------------------------------
+//   CHANGE LOG
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//   04-15-2022: init
+//
+// -----------------------------------------------------------------------------
+func Help( command string ) {
+    switch command {
+        case "delete":
+            print( " usage - /delete/" )
+            print( "   \\-- permanently remove an object" )
+            print( "   |" )
+            print( "   \\-> delete [board] <b>")
+            print( "   |" )
+            print( "   \\-- deletes a board named /b/" )
+            print( "   \\   if the flag /board/ is not present, it will be assumed" )
+            print( "   \\   if /b/ doesn't exist, /delete/ will alert user" )
+            print( "   |" )
+            print( "   \\-> delete task <t>" )
+            print( "   |" )
+            print( "   \\-- deletes a task named /t/" )
+            print( "   \\   will fail without /task/ flag" )
+            print( "   \\   if /t/ doesn't exist, /delete/ will alert user" )
+            print( "   |" )
+            print( "   \\-> delete subtask <s>" )
+            print( "   |" )
+            print( "   \\-- deletes a subtask named /s/" )
+            print( "   \\   will fail without /subtask/ flag" )
+            print( "   \\   if /s/ doesn't exist, /delete/ will alert user" )
+            print()
+        case "make":
+            print( " usage - /make/" )
+            print( "   \\-- create a new object" )
+            print( "   |" )
+            print( "   \\-> make [board] <b>" )
+            print( "   |" )
+            print( "   \\-- creates a new board named /b/" )
+            print( "   \\   if the flag /board/ is not present, it will be assumed" )
+            print( "   \\   board names cannot contain the word \"task\"" )
+            print( "   |" )
+            print( "   \\-> make [board] <b> task <t>" )
+            print( "   |" )
+            print( "   \\-- creates a new task named <t> under board <b>" )
+            print( "   \\   will fail without /task/ flag" )
+            print( "   \\   if the flag /board/ is not present, it will be assumed" )
+            print( "   \\   neither board nor task names may contain the word \"task\"" )
+            print( "   |" )
+            print( "   \\-> make task <t> subtask <s>" )
+            print( "   |" )
+            print( "   \\-- creates a new subtask named <s> under task <t>" )
+            print( "   \\   will fail without /task/ and /subtask/ flags" )
+            print( "   \\   neither task nor subtask names may contain the words" )
+            print( "   \\   \"task\" or \"subtask\"" )
+            print()
+        case "mark":
+            print( " usage - /mark/" )
+            print( "   \\-- set a fill of a task or subtask" )
+            print( "   |" )
+            print( "   \\-> mark task <t> <fill>" )
+            print( "   |" )
+            print( "   \\-- set the status of task /t/ to /fill/" )
+            print( "   \\   /fill/" )
+            print( "        \\-- must be an integer" )
+            print( "        \\-- negative numbers are allowed (and lowkey encouraged)" )
+            print( "        \\-- numbers above 100 are truncated" )
+            print( "   \\   will fail without /task/ flag" )
+            print( "   \\   task names cannot contain the word \"task\"" )
+            print( "   |" )
+            print( "   \\-> mark subtask <s> <fill>" )
+            print( "   |" )
+            print( "   \\-- set the status of subtask /t/ to /fill/" )
+            print( "   \\   /fill/" )
+            print( "        \\-- must be an integer" )
+            print( "        \\-- negative numbers are allowed (and lowkey encouraged)" )
+            print( "        \\-- numbers above 100 are truncated" )
+            print( "   \\   will fail without /subtask/ flag" )
+            print( "   \\   subtask names cannot contain the words" )
+            print( "   \\   \"task\" or \"subtask\"" )
+            print()
+        case "show":
+            print( " usage - /show/" )
+            print( "   \\-- print user-requested objects" )
+            print( "   |" )
+            print( "   \\-> show boards" )
+            print( "   |" )
+            print( "   \\-- print a quick list of all boards" )
+            print( "   |" )
+            print( "   \\-> show tasks" )
+            print( "   |" )
+            print( "   \\-- print a quick list of all tasks (under their respective boards)" )
+            print( "   |" )
+            print( "   \\-> show [all]" )
+            print( "   |" )
+            print( "   \\-- print everything" )
+            print( "   |" )
+            print( "   \\-> show [board] <b>" )
+            print( "   |" )
+            print( "   \\-- print everything inside board /b/" )
+            print( "   \\   if the flag /board/ is not present, it will be assumed" )
+            print( "   |" )
+            print( "   \\-> show task <t>" )
+            print( "   |" )
+            print( "   \\-- print parent board of task /t/, task /t/, and its contents" )
+            print( "   \\   will fail without /task/ flag" )
+            print( "   |" )
+            print( "   \\-> show subtask <s>" )
+            print( "   |" )
+            print( "   \\-- show the parent board and task of subtask /s/" )
+            print( "   \\   will fail without /subtask/ flag" )
+            print()
+        default:
+            print( "what? how?" )
+    }
 }
 
 
@@ -604,6 +760,7 @@ func del( search query ) {
 
     // if fail is set, quit
     if search.command == "fail" {
+        Help( "delete" )
         return
     }
 
@@ -787,6 +944,7 @@ func сделай( search query ) {
 
     // if fail is set, quit
     if search.command == "fail" {
+        Help( "make" )
         return
     }
 
@@ -802,8 +960,7 @@ func сделай( search query ) {
                 // print error, call help about it
                 print( "Error in make()" )
                 print( "No object specified" )
-                makeFailure := []string{ "help", "make" }
-                help( makeFailure )
+                Help( "make" )
                 return
             } else {                    // yes board
                 exists = true   // signal that parent did exist
@@ -821,8 +978,7 @@ func сделай( search query ) {
                 // print error, call help about it
                 print( "Error in make()" )
                 print( "Cannot make task without specifying board" )
-                makeFailure := []string{ "help", "make" }
-                help( makeFailure )
+                Help( "make" )
                 return
             } else {                    // board is specified
                 exists = true           // signal parent did exist
@@ -854,8 +1010,7 @@ func сделай( search query ) {
             // print error, call help about it
             print( "Error in make()" )
             print( "Cannot make subtask with specifying task" )
-            makeFailure := []string{ "help", "make" }
-            help( makeFailure )
+            Help( "make" )
             return
         } else {                            // yes task
             // iterate over boards to look for requested task
@@ -901,8 +1056,7 @@ func сделай( search query ) {
             p( " object " )
         }
         print( "does not exist" )
-        makeFailure := []string{ "help", "make" }
-        help( makeFailure )
+        Help( "make" )
     }
 
 }
@@ -944,6 +1098,7 @@ func mark( search query ) {
     // if parse() failed, simply return
     // probably print failure too?
     if search.command == "fail" {
+        Help( "mark" )
         return
     }
 
@@ -960,14 +1115,13 @@ func mark( search query ) {
     // on error, print failure, call help about it, return
     if err != nil {
         print( "Fill value /" + search.subB + "/ is not a number" )
-        markFailure := []string{ "help", "mark" }
-        help( markFailure )
+        Help( "mark" )
         return
     }
 
     // round fill down to 100 max, specifically allow negative fill
     if markFill > 100 {
-        markFill = 100
+        search.subB = "100"
     }
 
     if x != "" {        // should be true, board is given
@@ -1027,8 +1181,7 @@ func mark( search query ) {
 //         switch over first command
 //              switch over length of subcommand
 //                  switch over contents of subcommand
-//   TODO: contemplate help case
-//         move to external file?
+//   TODO: move to external file?
 // -----------------------------------------------------------------------------
 //   CHANGE LOG
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -1070,7 +1223,7 @@ func parse( commands []string ) query {
     // big switch statement over command
     switch comm {
         // these don't really need processing, break out immediately
-        case "save", "set", "quit", "exit":
+        case "save", "set", "quit", "exit", "help", "":
             return search
         case "delete":
             // there are only so many types of commands that work here
@@ -1268,6 +1421,7 @@ func parse( commands []string ) query {
                 // show
                 // set subcommand to all
                 search.subA = "all"
+                return search
             } else {
                 switch subcommands[0] {
                     case "boards", "tasks":
@@ -1317,7 +1471,6 @@ func parse( commands []string ) query {
             }
         default:    // command not recognized
             // print error, call help about it
-            //print( "Command /", comm, "/ not recognized" )
             print( "Command /", comm, "/ not recognized" )
             commFailure := []string{ "help" }
             help( commFailure )
@@ -1451,8 +1604,7 @@ func show( search query ) {
             } else {    // if board DNE
                 // print error, call help about it
                 print( "Board /" + sbd + "/ does not exist" )
-                showFailure := []string{ "help", "show" }
-                help( showFailure )
+                Help( "show" )
                 return
             }
         case "boards":
@@ -1504,8 +1656,7 @@ func show( search query ) {
                                 // print error
                                 // call help about it
                 print( "Task /" + stk + "/ does not exist" )
-                showFailure := []string{ "help", "show" }
-                help( showFailure )
+                Help( "show" )
                 return
             }
         case "tasks":
@@ -1549,16 +1700,14 @@ func show( search query ) {
                                 // print error
                                 // call help about it
                 print( "Subtask /" + sstk + "/ does not exist" )
-                showFailure := []string{ "help", "show" }
-                help( showFailure )
+                Help( "show" )
                 return
             }
         default:    // unrecognized subcommand
             // print error, call help about it
             print( "Error in show()" )
             print( "Subcommand /" + subcom + "/ does not exist" )
-            showFailure := []string{ "help", "show" }
-            help( showFailure )
+            Help( "show" )
             return
     }
 }
@@ -1615,16 +1764,9 @@ var home string         // declare string to keep track of home dir
 // MAIN
 func main() {
 
-    // get home directory from user
-    home, err := dir()
-
-    if err != nil {     // check if home dir failed
-        panic( err )    // panic if so
-    }
-
     catch()     // call function to catch keyboard interrupts
 
-    fileIn( home )    // open data file, process into structure
+    fileIn()    // open data file, process into structure
 
     for {       // infinite loop, where everything happens
 
@@ -1671,7 +1813,7 @@ func main() {
             case "mark":
                 mark( search )
             case "save":
-                fileOut( home )
+                fileOut()
                 changed = false
                 print( "Updates saved" )
             case "show":
@@ -1685,7 +1827,7 @@ func main() {
 
                 // if file was changed, rewrite to file
                 if changed {
-                    fileOut( home )
+                    fileOut()
                 }
 
                 exit( 0 )    // exeunt
@@ -1704,7 +1846,7 @@ func main() {
         if cmd {
             // if file was changed, rewrite to file
             if changed {
-                fileOut( home )
+                fileOut()
             }
             break
         }
