@@ -1,7 +1,7 @@
 // =============================================================================
 // Auth: Alex Celani
 // File: tdm.go
-// Revn: 04-20-2022  5.2
+// Revn: 04-20-2022  6.0
 // 
 // Func: display and manage progress of a litany of items to be done,
 //       with an organization scheme similar to Trello. It's CLI
@@ -117,7 +117,7 @@
 //                  /show/ to print boards or tasks
 // 04-15-2022: added new function, Help() for when functions fail
 //             added /about/ section to help()
-// 04-20-2022: fixed bug where keyboard interrupts would fail to write
+//*04-20-2022: fixed bug where keyboard interrupts would fail to write
 //                  data out to file
 //
 // =============================================================================
